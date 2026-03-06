@@ -1,0 +1,35 @@
+# /etc/systemd/system/fleet-agent.service
+#
+# Install the agent:
+#   1. Publish:  dotnet publish -c Release -o /opt/fleet-agent
+#   2. Copy this file to /etc/systemd/system/fleet-agent.service
+#   3. sudo systemctl daemon-reload
+#   4. sudo systemctl enable --now fleet-agent
+#
+# Logs:  journalctl -u fleet-agent -f
+
+[Unit]
+Description=Fleet Manager Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+WorkingDirectory=/opt/fleet-agent
+ExecStart=/opt/fleet-agent/Agent.Worker
+Restart=always
+RestartSec=10
+
+# Security hardening
+User=fleet-agent
+Group=fleet-agent
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+
+# Environment overrides (alternative to appsettings.json)
+Environment=CloudConsole__HubUrl=https://console.example.com/hub/fleet
+Environment=Agent__Id=agent-radiology-01
+
+[Install]
+WantedBy=multi-user.target

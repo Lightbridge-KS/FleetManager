@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fleet Manager — Cloud Console</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: system-ui, -apple-system, sans-serif; background: #0f172a; color: #e2e8f0; }
+        .header { background: #1e293b; padding: 1rem 2rem; display: flex; align-items: center; gap: 1rem; border-bottom: 1px solid #334155; }
+        .header h1 { font-size: 1.25rem; font-weight: 600; }
+        .header .badge { background: #22c55e; color: #000; padding: 2px 10px; border-radius: 999px; font-size: 0.75rem; font-weight: 600; }
+        .container { max-width: 1100px; margin: 2rem auto; padding: 0 1rem; }
+        .section-title { font-size: 1rem; font-weight: 600; margin-bottom: 0.75rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; }
+
+        /* Agent Cards */
+        .agents { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+        .agent-card { background: #1e293b; border-radius: 8px; padding: 1.25rem; border: 1px solid #334155; }
+        .agent-card.offline { opacity: 0.5; }
+        .agent-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+        .agent-name { font-weight: 600; font-size: 1rem; }
+        .status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+        .status-dot.online { background: #22c55e; box-shadow: 0 0 6px #22c55e; }
+        .status-dot.offline { background: #ef4444; }
+        .metrics { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem; margin-bottom: 1rem; }
+        .metric { text-align: center; }
+        .metric-value { font-size: 1.25rem; font-weight: 700; color: #38bdf8; }
+        .metric-label { font-size: 0.7rem; color: #64748b; }
+        .apps-list { font-size: 0.8rem; }
+        .app-row { display: flex; justify-content: space-between; padding: 4px 0; border-top: 1px solid #334155; }
+        .app-status { padding: 1px 6px; border-radius: 4px; font-size: 0.7rem; font-weight: 600; }
+        .app-status.Running { background: #166534; color: #4ade80; }
+        .app-status.Stopped { background: #7f1d1d; color: #fca5a5; }
+        .app-status.Error   { background: #7f1d1d; color: #fca5a5; }
+
+        /* Action Buttons */
+        .actions { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
+        .btn { padding: 4px 10px; border: none; border-radius: 4px; font-size: 0.75rem; cursor: pointer; font-weight: 600; }
+        .btn-restart { background: #f59e0b; color: #000; }
+        .btn-config  { background: #6366f1; color: #fff; }
+        .btn-update  { background: #22c55e; color: #000; }
+
+        /* Audit Log */
+        .audit { background: #1e293b; border-radius: 8px; padding: 1rem; border: 1px solid #334155; max-height: 300px; overflow-y: auto; }
+        .audit-row { font-size: 0.8rem; padding: 4px 0; border-bottom: 1px solid #1e293b; display: flex; gap: 0.75rem; }
+        .audit-time { color: #64748b; min-width: 140px; }
+        .audit-agent { color: #38bdf8; min-width: 80px; }
+        .audit-cat { color: #a78bfa; min-width: 100px; }
+        .audit-msg { color: #cbd5e1; }
+        #no-agents { color: #64748b; text-align: center; padding: 3rem; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Fleet Manager</h1>
+        <span class="badge" id="agent-count">0 agents</span>
+    </div>
+
+    <div class="container">
+        <div class="section-title">Connected Agents</div>
+        <div class="agents" id="agents-grid">
+            <div id="no-agents">No agents connected. Start an Agent.Worker to see it here.</div>
+        </div>
+
+        <div class="section-title" style="margin-top:1.5rem;">Audit Log</div>
+        <div class="audit" id="audit-log"></div>
+    </div>
+
+    <script>
+        // Poll REST API every 2 seconds (simple approach; in production use SignalR to push to browser too)
+        async function refresh() {
+            try {
+                const [agentsRes, auditRes] = await Promise.all([
+                    fetch('/api/agents'), fetch('/api/audit')
+                ]);
+                const agents = await agentsRes.json();
+                const audit  = await auditRes.json();
+                renderAgents(agents);
+                renderAudit(audit);
+            } catch (e) { console.error('Refresh failed', e); }
+        }
+
+        function renderAgents(agents) {
+            const grid = document.getElementById('agents-grid');
+            const badge = document.getElementById('agent-count');
+            const online = agents.filter(a => a.isOnline).length;
+            badge.textContent = `${online}/${agents.length} online`;
+
+            if (agents.length === 0) {
+                grid.innerHTML = '<div id="no-agents">No agents connected. Start an Agent.Worker to see it here.</div>';
+                return;
+            }
+
+            grid.innerHTML = agents.map(a => `
+                <div class="agent-card ${a.isOnline ? '' : 'offline'}">
+                    <div class="agent-header">
+                        <span class="agent-name">${a.hostname} <span style="color:#64748b;font-weight:400;font-size:0.8rem;">(${a.agentId})</span></span>
+                        <span class="status-dot ${a.isOnline ? 'online' : 'offline'}"></span>
+                    </div>
+                    <div class="metrics">
+                        <div class="metric"><div class="metric-value">${a.cpuPercent.toFixed(1)}%</div><div class="metric-label">CPU</div></div>
+                        <div class="metric"><div class="metric-value">${a.memoryUsedMb.toFixed(0)}</div><div class="metric-label">MEM (MB)</div></div>
+                        <div class="metric"><div class="metric-value">${a.diskUsedPercent.toFixed(1)}%</div><div class="metric-label">DISK</div></div>
+                    </div>
+                    <div class="apps-list">
+                        ${a.managedApps.map(app => `
+                            <div class="app-row">
+                                <span>${app.name} <span style="color:#64748b">v${app.version}</span></span>
+                                <span class="app-status ${app.status}">${app.status}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                    <div class="actions">
+                        ${a.managedApps.map(app => `
+                            <button class="btn btn-restart" onclick="sendCommand('${a.agentId}','restart-app','${app.appId}')">↻ ${app.name}</button>
+                        `).join('')}
+                        <button class="btn btn-config" onclick="sendConfig('${a.agentId}','${a.managedApps[0]?.appId || ''}')">⚙ Config</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderAudit(events) {
+            const log = document.getElementById('audit-log');
+            log.innerHTML = events.map(e => `
+                <div class="audit-row">
+                    <span class="audit-time">${new Date(e.timestampUtc).toLocaleString()}</span>
+                    <span class="audit-agent">${e.agentId}</span>
+                    <span class="audit-cat">${e.category}</span>
+                    <span class="audit-msg">${e.message}</span>
+                </div>
+            `).join('');
+        }
+
+        async function sendCommand(agentId, action, appId) {
+            await fetch(`/api/agents/${agentId}/${action}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ appId })
+            });
+            setTimeout(refresh, 500);
+        }
+
+        async function sendConfig(agentId, appId) {
+            const key = prompt('Config key:', 'LogLevel');
+            if (!key) return;
+            const value = prompt('Config value:', 'Debug');
+            if (value === null) return;
+            await fetch(`/api/agents/${agentId}/push-config`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ appId, settings: { [key]: value } })
+            });
+            setTimeout(refresh, 500);
+        }
+
+        setInterval(refresh, 2000);
+        refresh();
+    </script>
+</body>
+</html>
