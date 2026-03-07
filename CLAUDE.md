@@ -11,6 +11,7 @@
 - **SignalR** — Bidirectional real-time communication (cloud ↔ agent)
 - **Worker Service** (`Microsoft.Extensions.Hosting`) — Agent daemon on Ubuntu
 - **systemd integration** (`Microsoft.Extensions.Hosting.Systemd`) — Linux service support
+- **System.CommandLine** (2.0.0-beta5) — CLI parsing for `fleet-ctl`
 - No database yet — in-memory `ConcurrentDictionary` (production: PostgreSQL + EF Core)
 
 ## Solution Structure
@@ -34,6 +35,17 @@ FleetManager.sln
 │   ├── Services/LocalAppManager.cs             # Simulates local app lifecycle
 │   └── Program.cs              #   Composition root with AddSystemd()
 │
+├── src/Fleet.Cli/              # CLI tool "fleet-ctl" (depends on Shared.Contracts)
+│   ├── Models/CliConfig.cs     #   Config record (URL, API key, output format)
+│   ├── Models/AgentDto.cs      #   CLI-side response model mirroring AgentState
+│   ├── Services/CliConfigManager.cs  # Load/save ~/.config/fleet-ctl/config.json
+│   ├── Services/CloudApiClient.cs    # HttpClient wrapper for Cloud Console REST API
+│   ├── Commands/LoginCommand.cs      # login --url <url> [--api-key <key>]
+│   ├── Commands/AgentsCommand.cs     # agents list | agents status <id>
+│   ├── Commands/AppsCommand.cs       # apps restart | config | update
+│   ├── Commands/AuditCommand.cs      # audit [--last N] [--agent <id>]
+│   └── Program.cs              #   Composition root, command tree wiring
+│
 └── docs/fleet-agent.service    # Example systemd unit file
 ```
 
@@ -41,9 +53,12 @@ FleetManager.sln
 
 ```
 CloudConsole.Api ──► Shared.Contracts ◄── Agent.Worker
+                          ▲
+                          │
+                      Fleet.Cli
 ```
 
-Both executable projects depend on `Shared.Contracts`. They never reference each other. All shared types (DTOs, hub interfaces, enums) live in `Shared.Contracts`.
+All executable projects depend on `Shared.Contracts`. They never reference each other. All shared types (DTOs, hub interfaces, enums) live in `Shared.Contracts`.
 
 ## Key Communication Pattern
 
@@ -52,28 +67,48 @@ SignalR is the single transport for all cloud ↔ agent communication:
 - **Agent → Cloud** (agent calls hub methods): `RegisterAgent`, `SendHeartbeat`, `ReportAuditEvent`, `ReportCommandResult`
 - **Cloud → Agent** (hub invokes client proxy): `PushConfig`, `RestartApp`, `UpdateApp`, `RequestHeartbeat`
 - **Browser → Cloud**: REST API (`GET /api/agents`, `GET /api/audit`, `POST /api/agents/{id}/restart-app`, etc.)
+- **CLI → Cloud**: Same REST API via `fleet-ctl` (`Fleet.Cli` project)
 
 The strongly-typed hub (`Hub<IAgentClient>`) and interface pair (`ICloudHub` / `IAgentClient`) ensure compile-time safety on both sides.
 
 ## Build and Run
 
+A `Makefile` is provided for common dev tasks. Key targets:
+
 ```bash
-# Build entire solution
-dotnet build
+# Build & test
+make build                # dotnet build
+make test                 # dotnet test
 
-# Run cloud console (Terminal 1)
-dotnet run --project src/CloudConsole.Api
-# Listens on http://localhost:6100
+# Run services (each in a separate terminal)
+make cloud                # Cloud Console on http://localhost:6100
+make agent                # Agent Worker (agent-radiology-01)
+make agent2               # Second agent (agent-pathology-02)
 
-# Run agent (Terminal 2)
-dotnet run --project src/Agent.Worker
-# Connects to cloud via SignalR, sends heartbeats every 10s
+# CLI (fleet-ctl) — requires cloud + agent running
+make cli-login            # Login to local cloud console
+make cli-agents           # List agents (table)
+make cli-agents-json      # List agents (JSON)
+make cli-agent-status     # Show agent detail
+make cli-app-restart      # Restart an app
+make cli-app-config       # Push config
+make cli-app-update       # Trigger app update
+make cli-audit            # View audit log
 
-# Run second agent with different ID
-dotnet run --project src/Agent.Worker -- --Agent:Id=agent-pathology-02
+# Override agent/app for any CLI target
+make cli-app-restart AGENT_ID=agent-pathology-02 APP_ID=dicom-gateway
+```
+
+Or run directly with `dotnet run`:
+
+```bash
+dotnet run --project src/CloudConsole.Api              # Terminal 1
+dotnet run --project src/Agent.Worker                  # Terminal 2
+dotnet run --project src/Fleet.Cli -- agents list      # Terminal 3
 ```
 
 Dashboard at http://localhost:6100. Agent config in `src/Agent.Worker/appsettings.json`.
+CLI config at `~/.config/fleet-ctl/config.json`.
 
 ## Coding Conventions
 
