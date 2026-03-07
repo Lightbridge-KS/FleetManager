@@ -1,0 +1,31 @@
+#!/bin/bash
+set -e
+
+# Create dedicated service user (idempotent)
+if ! id -u fleet-agent &>/dev/null; then
+    useradd --system --no-create-home --shell /usr/sbin/nologin fleet-agent
+    echo "Created fleet-agent user"
+fi
+
+# Create data directory if it doesn't exist
+mkdir -p /var/lib/fleet-agent
+
+# Set ownership and permissions
+chown -R fleet-agent:fleet-agent /opt/fleet-agent
+chown -R fleet-agent:fleet-agent /var/lib/fleet-agent
+chown fleet-agent:fleet-agent /etc/fleet-agent/agent.env
+chmod 600 /etc/fleet-agent/agent.env
+chmod +x /opt/fleet-agent/Agent.Worker
+
+# Reload systemd and enable the service
+systemctl daemon-reload
+systemctl enable fleet-agent
+
+# Start or restart (handles both fresh install and upgrade)
+if systemctl is-active --quiet fleet-agent; then
+    systemctl restart fleet-agent
+    echo "fleet-agent restarted"
+else
+    systemctl start fleet-agent
+    echo "fleet-agent started"
+fi

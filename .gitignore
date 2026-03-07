@@ -58,3 +58,9 @@ CodeCoverage/
 *.VisualState.xml
 TestResult.xml
 nunit-*.xml
+
+# .deb packaging build artifacts
+dist/
+tmp-publish/
+tmp-deb/
+publish/
