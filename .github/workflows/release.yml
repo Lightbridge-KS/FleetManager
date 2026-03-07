@@ -1,4 +1,4 @@
-name: Release Agent .deb
+name: Release
 
 on:
   push:
@@ -58,20 +58,64 @@ jobs:
           name: fleet-agent-deb
           path: ./dist/fleet-agent_*.deb
 
+  build-cli:
+    name: Build CLI (${{ matrix.os-label }})
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - runtime: linux-x64
+            os-label: linux-x64
+          - runtime: osx-x64
+            os-label: macos-x64
+          - runtime: osx-arm64
+            os-label: macos-arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Publish fleet-ctl
+        run: |
+          dotnet publish src/Fleet.Cli \
+            --configuration Release \
+            --runtime ${{ matrix.runtime }} \
+            --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:IncludeNativeLibrariesForSelfExtract=true \
+            -o ./publish
+
+      - name: Package tarball
+        run: |
+          tar -czf fleet-ctl-${{ matrix.os-label }}.tar.gz \
+            -C ./publish fleet-ctl
+
+      - name: Upload CLI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: fleet-ctl-${{ matrix.os-label }}
+          path: fleet-ctl-${{ matrix.os-label }}.tar.gz
+
   release:
     name: Create GitHub Release
-    needs: build-deb
+    needs: [build-deb, build-cli]
     runs-on: ubuntu-latest
     steps:
-      - name: Download .deb artifact
+      - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          name: fleet-agent-deb
+          merge-multiple: true
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: fleet-agent_*.deb
+          files: |
+            fleet-agent_*.deb
+            fleet-ctl-*.tar.gz
           generate_release_notes: true
           draft: true
           prerelease: false
