@@ -1,0 +1,12 @@
+#!/bin/bash
+set -e
+
+# On full purge, remove user and data
+if [ "$1" = "purge" ]; then
+    userdel fleet-agent 2>/dev/null || true
+    rm -rf /var/lib/fleet-agent
+    rm -rf /etc/fleet-agent
+    echo "fleet-agent purged"
+fi
+
+systemctl daemon-reload

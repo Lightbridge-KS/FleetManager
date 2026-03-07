@@ -63,7 +63,7 @@ dotnet build
 
 # Run cloud console (Terminal 1)
 dotnet run --project src/CloudConsole.Api
-# Listens on http://localhost:5000
+# Listens on http://localhost:6100
 
 # Run agent (Terminal 2)
 dotnet run --project src/Agent.Worker
@@ -73,7 +73,7 @@ dotnet run --project src/Agent.Worker
 dotnet run --project src/Agent.Worker -- --Agent:Id=agent-pathology-02
 ```
 
-Dashboard at http://localhost:5000. Agent config in `src/Agent.Worker/appsettings.json`.
+Dashboard at http://localhost:6100. Agent config in `src/Agent.Worker/appsettings.json`.
 
 ## Coding Conventions
 
@@ -91,17 +91,17 @@ Dashboard at http://localhost:5000. Agent config in `src/Agent.Worker/appsetting
 
 ```bash
 # Restart an app on a specific agent
-curl -X POST http://localhost:5000/api/agents/agent-radiology-01/restart-app \
+curl -X POST http://localhost:6100/api/agents/agent-radiology-01/restart-app \
   -H "Content-Type: application/json" \
   -d '{"appId":"radiology-ai"}'
 
 # Push config to an app
-curl -X POST http://localhost:5000/api/agents/agent-radiology-01/push-config \
+curl -X POST http://localhost:6100/api/agents/agent-radiology-01/push-config \
   -H "Content-Type: application/json" \
   -d '{"appId":"dicom-gateway","settings":{"LogLevel":"Debug"}}'
 
 # Trigger app update
-curl -X POST http://localhost:5000/api/agents/agent-radiology-01/update-app \
+curl -X POST http://localhost:6100/api/agents/agent-radiology-01/update-app \
   -H "Content-Type: application/json" \
   -d '{"appId":"radiology-ai","targetVersion":"2.0.0","artifactUrl":"https://artifacts.example.com/v2.tar.gz"}'
 ```

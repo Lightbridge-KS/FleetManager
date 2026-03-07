@@ -1,0 +1,12 @@
+Package: fleet-agent
+Version: {{VERSION}}
+Section: admin
+Priority: optional
+Architecture: amd64
+Depends: libicu74 | libicu72 | libicu70, libssl3 | libssl1.1
+Maintainer: FleetManager Team <infra@example.com>
+Homepage: https://github.com/Lightbridge-KS/FleetManager
+Description: Fleet Manager Agent
+ Lightweight agent daemon that connects to the Fleet Manager
+ cloud console for remote monitoring, configuration, and
+ application lifecycle management.
